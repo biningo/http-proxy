@@ -1,7 +1,16 @@
 import socket
+import ssl
 import threading
 
+# 加载自签名 CA 证书
+context = ssl.create_default_context()
+context.load_cert_chain(certfile="/Users/icepan/data/py-code/http-proxy/ssl/mycert.pem",
+                        keyfile="/Users/icepan/data/py-code/http-proxy/ssl/private_key.pem")
+context.check_hostname = False  # 忽略校验域名
+context.verify_mode = ssl.CERT_NONE  # 忽略校验客户端CA
 
+
+# ssl拦截之后下面内容都可见
 def forward(source_socket, target_socket):
     while True:
         content = source_socket.recv(1024)
@@ -28,8 +37,11 @@ def handle_client(client_socket: socket.socket) -> None:
         client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
         print('HTTPS connection established')
 
-        t1 = threading.Thread(target=forward, args=(server_socket, client_socket))
-        t2 = threading.Thread(target=forward, args=(client_socket, server_socket))
+        ssl_client_socket = context.wrap_socket(client_socket, server_side=True)
+        ssl_server_socket = ssl.wrap_socket(server_socket)
+
+        t1 = threading.Thread(target=forward, args=(ssl_server_socket, ssl_client_socket))
+        t2 = threading.Thread(target=forward, args=(ssl_client_socket, ssl_server_socket))
         t1.start()
         t2.start()
         t1.join()
